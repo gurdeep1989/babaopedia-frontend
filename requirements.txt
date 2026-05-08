@@ -2,3 +2,4 @@ supabase
 sentence-transformers
 huggingface_hub
 numpy
+gradio
