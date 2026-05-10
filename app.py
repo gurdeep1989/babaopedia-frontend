@@ -111,4 +111,4 @@ with gr.Blocks(title="Pregnancy Book Q&A (RAG POC)") as demo:
         ],
     )
 
-demo.launch()
+demo.launch(ssr_mode=False)
