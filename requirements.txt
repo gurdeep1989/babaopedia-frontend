@@ -2,4 +2,4 @@ supabase
 sentence-transformers
 huggingface_hub
 numpy
-gradio
+gradio>=4.44.0

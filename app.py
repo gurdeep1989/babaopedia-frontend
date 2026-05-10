@@ -100,15 +100,14 @@ def answer_with_llama(question: str, history: list, k: int = 5):
 
 # ------------------ Gradio UI ------------------
 
-with gr.Blocks(title="Pregnancy Book Q&A (RAG POC)") as demo:
-    gr.Markdown("## 👶 Pregnancy Book Q&A (RAG POC)\nAsk a question. The app retrieves the most relevant chunks from Supabase (pgvector) and answers using Llama 3.1 8B on Hugging Face.")
-
-    gr.ChatInterface(
-        fn=answer_with_llama,
-        chatbot=gr.Chatbot(height=500),
-        additional_inputs=[
-            gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Number of chunks to retrieve (top-k)"),
-        ],
-    )
+demo = gr.ChatInterface(
+    fn=answer_with_llama,
+    title="👶 Pregnancy Book Q&A (RAG POC)",
+    description="Ask a question. The app retrieves the most relevant chunks from Supabase (pgvector) and answers using Llama 3.1 8B on Hugging Face.",
+    chatbot=gr.Chatbot(height=500),
+    additional_inputs=[
+        gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Number of chunks to retrieve (top-k)"),
+    ],
+)
 
 demo.launch(ssr_mode=False)
