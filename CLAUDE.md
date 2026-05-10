@@ -51,29 +51,43 @@ This function finds the most relevant text chunks from the database for a given 
 2. That vector is sent to Supabase via a stored procedure called `match_pregnancy_chunks`, which uses **pgvector** to find the `k` most similar chunks already stored in the database.
 3. The function returns the matching chunks joined as a single `context` string, plus the raw rows for optional debug display.
 
-### 3. Answer generation — `answer_with_llama()` (lines 64–104)
+### 3. Answer generation — `answer_with_llama(question, history, k)`
 
-This function takes the user's question, calls the retrieval function above, then asks the LLM to answer:
+This function is the core of the app. It is called automatically by Gradio every time the user sends a message.
 
-1. Calls `retrieve_context_from_supabase()` to get the relevant text.
-2. Builds a prompt in the format: *"Answer the question based only on the context below. Context: ... Question: ... Answer:"*
-3. Sends that prompt to Llama 3.1 8B on HuggingFace. The model is instructed to only use the provided context — it won't make things up from its training data.
-4. Returns the answer text, and optionally a debug string showing which chunks were retrieved (source, page range, similarity score).
+**Parameters:**
+- `question` — the latest message the user typed
+- `history` — all previous turns in the current session, passed automatically by Gradio
+- `k` — number of chunks to retrieve (comes from the slider, default 5)
 
-### 4. Gradio UI (lines 109–128)
+**What it does:**
+1. Calls `retrieve_context_from_supabase()` to fetch the most relevant text chunks for the current question.
+2. Builds the `messages` list for the LLM:
+   - Starts with a system prompt telling Llama to only answer from the given context.
+   - Appends all previous conversation turns from `history` so Llama can handle follow-up questions.
+   - Appends the current question wrapped with the retrieved context.
+3. Calls Llama 3.1 8B via HuggingFace `InferenceClient` and returns the answer string.
 
-Gradio is a Python library that turns functions into a web interface automatically. Here's what each UI element maps to:
+**History format compatibility:** Gradio 4 passes history as a list of `[user, assistant]` tuples; Gradio 5 passes it as a list of `{"role": ..., "content": ...}` dicts. The code handles both formats with an `isinstance(item, dict)` check.
 
-| UI element | Variable | Purpose |
-|---|---|---|
-| Text input box | `question_in` | User types their question here |
-| Slider (3–10) | `k_in` | Controls how many chunks to retrieve from the database |
-| Checkbox | `show_ctx` | If checked, shows the raw retrieved chunks below the answer |
-| "Get answer" button | `btn` | Triggers the call to `answer_with_llama()` |
-| Answer box | `answer_out` | Displays the LLM's response |
-| Retrieved chunks box | `ctx_out` | Displays debug info when the checkbox is on |
+### 4. Gradio ChatInterface
 
-When the user clicks **Get answer**, Gradio calls `answer_with_llama(question, k, show_context)` and puts the two return values into `answer_out` and `ctx_out`.
+Gradio is a Python library that turns a Python function into a web UI automatically. The app uses `gr.ChatInterface`, which is Gradio's built-in chat component — it renders a full chat window, handles the message input box, send button, and conversation history automatically.
+
+**How `gr.ChatInterface` works:**
+- The user types a message and presses Enter (or clicks the send button).
+- Gradio calls `answer_with_llama(question, history, k)` automatically, passing the current message, the full conversation history so far, and the value of the slider.
+- The returned string is displayed as the assistant's reply and added to the history for the next turn.
+- The conversation history lives in the browser session — refreshing the page starts a fresh conversation.
+
+**UI elements:**
+
+| Element | Purpose |
+|---|---|
+| Chat window | Displays the full conversation |
+| Text input (bottom) | User types their question; press Enter or click → to send |
+| "Additional inputs" panel | Expands to reveal the top-k slider |
+| Slider (3–10) | Controls how many chunks to retrieve from Supabase per question |
 
 ## Deploying to Hugging Face Spaces
 
@@ -100,15 +114,30 @@ The app is hosted at: `https://huggingface.co/spaces/gurdeep1989/baobaopedia`
    git push space master:main
    ```
 
-### Subsequent pushes
+### Deploying changes
+
+Every time you change code locally, push it to the Space with:
 
 ```bash
-git add .
-git commit -m "your message"
-git push space master:main
+git add app.py                        # stage the changed file(s)
+git commit -m "describe what changed"
+git push space master:main            # deploy to HuggingFace
 ```
 
-Use `--force` only if you need to overwrite conflicting history on the remote.
+After pushing, HuggingFace automatically detects the new commit, reinstalls dependencies if `requirements.txt` changed, and restarts the app. Watch the **Logs** tab in your Space to see the build progress.
+
+Use `--force` only if you need to overwrite conflicting history on the remote:
+```bash
+git push --force space master:main
+```
+
+### Checking what's deployed
+
+If you're unsure whether HF has your latest code, run:
+```bash
+git log space/main --oneline -3
+```
+Compare the top commit hash against your local `git log --oneline -3`. If they differ, you need to push.
 
 ## Key External Dependencies
 
