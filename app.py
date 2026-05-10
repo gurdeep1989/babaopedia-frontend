@@ -61,47 +61,41 @@ def retrieve_context_from_supabase(question: str, k: int = 5):
     return context, rows
 
 
-def answer_with_llama(question: str, k: int = 5, show_context: bool = False):
+def answer_with_llama(question: str, history: list, k: int = 5):
     question = (question or "").strip()
     if not question:
-        return "Please enter a question.", ""
+        return "Please enter a question."
 
-    context, rows = retrieve_context_from_supabase(question, k=k)
+    context, _ = retrieve_context_from_supabase(question, k=k)
 
     if not context.strip():
-        return "I couldn't find relevant context in the knowledge base.", ""
+        return "I couldn't find relevant context in the knowledge base."
 
     llm_client = get_llm_client()
+
+    # Build message list: system prompt, then all previous turns, then current question
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant who answers based only on the given context."},
+    ]
+    for user_msg, assistant_msg in history:
+        messages.append({"role": "user", "content": user_msg})
+        messages.append({"role": "assistant", "content": assistant_msg})
 
     prompt = (
         "Answer the question based only on the context below.\n\n"
         f"Context:\n{context}\n\n"
         f"Question: {question}\nAnswer:"
     )
+    messages.append({"role": "user", "content": prompt})
 
     response = llm_client.chat_completion(
         model="meta-llama/Llama-3.1-8B-Instruct",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant who answers based only on the given context."},
-            {"role": "user", "content": prompt},
-        ],
+        messages=messages,
         max_tokens=300,
         temperature=0.3,
     )
 
-    answer = response.choices[0].message["content"]
-
-    # Optional: display retrieved chunks for transparency/debugging
-    if show_context:
-        formatted = []
-        for i, r in enumerate(rows, start=1):
-            meta = f"Chunk {i} | source={r.get('source')} | pages={r.get('page_range')} | idx={r.get('chunk_index')} | sim={r.get('similarity')}"
-            formatted.append(meta + "\n" + (r.get("content") or ""))
-        debug_text = "\n\n" + ("-" * 60) + "\n\n".join(formatted)
-    else:
-        debug_text = ""
-
-    return answer, debug_text
+    return response.choices[0].message["content"]
 
 
 # ------------------ Gradio UI ------------------
@@ -109,21 +103,12 @@ def answer_with_llama(question: str, k: int = 5, show_context: bool = False):
 with gr.Blocks(title="Pregnancy Book Q&A (RAG POC)") as demo:
     gr.Markdown("## 👶 Pregnancy Book Q&A (RAG POC)\nAsk a question. The app retrieves the most relevant chunks from Supabase (pgvector) and answers using Llama 3.1 8B on Hugging Face.")
 
-    with gr.Row():
-        question_in = gr.Textbox(label="Your question", value="What are pain interventions?", lines=2)
-    with gr.Row():
-        k_in = gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Number of chunks to retrieve (top-k)")
-        show_ctx = gr.Checkbox(label="Show retrieved chunks (debug)", value=False)
+    k_in = gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Number of chunks to retrieve (top-k)")
 
-    btn = gr.Button("Get answer")
-
-    answer_out = gr.Textbox(label="Answer", lines=8)
-    ctx_out = gr.Textbox(label="Retrieved chunks", lines=16, visible=True)
-
-    btn.click(
-        fn=answer_with_llama,
-        inputs=[question_in, k_in, show_ctx],
-        outputs=[answer_out, ctx_out],
+    gr.ChatInterface(
+        fn=lambda question, history: answer_with_llama(question, history, k=k_in.value),
+        chatbot=gr.Chatbot(height=500),
+        textbox=gr.Textbox(placeholder="Ask a question about pregnancy...", lines=2),
     )
 
 demo.launch()
