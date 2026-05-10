@@ -103,12 +103,12 @@ def answer_with_llama(question: str, history: list, k: int = 5):
 with gr.Blocks(title="Pregnancy Book Q&A (RAG POC)") as demo:
     gr.Markdown("## 👶 Pregnancy Book Q&A (RAG POC)\nAsk a question. The app retrieves the most relevant chunks from Supabase (pgvector) and answers using Llama 3.1 8B on Hugging Face.")
 
-    k_in = gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Number of chunks to retrieve (top-k)")
-
     gr.ChatInterface(
-        fn=lambda question, history: answer_with_llama(question, history, k=k_in.value),
+        fn=answer_with_llama,
         chatbot=gr.Chatbot(height=500),
-        textbox=gr.Textbox(placeholder="Ask a question about pregnancy...", lines=2),
+        additional_inputs=[
+            gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Number of chunks to retrieve (top-k)"),
+        ],
     )
 
 demo.launch()
