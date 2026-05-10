@@ -77,9 +77,13 @@ def answer_with_llama(question: str, history: list, k: int = 5):
     messages = [
         {"role": "system", "content": "You are a helpful assistant who answers based only on the given context."},
     ]
-    for user_msg, assistant_msg in history:
-        messages.append({"role": "user", "content": user_msg})
-        messages.append({"role": "assistant", "content": assistant_msg})
+    for item in history:
+        if isinstance(item, dict):
+            messages.append({"role": item["role"], "content": item["content"]})
+        else:
+            user_msg, assistant_msg = item
+            messages.append({"role": "user", "content": user_msg})
+            messages.append({"role": "assistant", "content": assistant_msg})
 
     prompt = (
         "Answer the question based only on the context below.\n\n"
